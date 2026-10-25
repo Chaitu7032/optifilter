@@ -1,0 +1,47 @@
+{
+  "manifest_metadata": {
+    "protocol": "OptiFilter Internal Empirical Validation Protocol — v2 (Research-Ready)",
+    "seed": 42,
+    "created_at": "2026-10-25T10:00:00",
+    "drishti_gs_note": "Uses only the official Drishti-GS training set (50 images with annotated GT). The physical test set (51 images) is held entirely separate and NOT used for any metric reporting. Internal splits are: 35 development (for hyperparameter exploration) and 15 held-out (for unbiased final evaluation). Split assigned by seed-42 stratified selection preserving the original non-contiguous numbering.",
+    "drive_note": "Uses all 20 training images with expert vessel GT. 15 development / 5 held-out under seed 42."
+  },
+  "DRIVE": {
+    "development": [
+      "21_training", "22_training", "23_training", "24_training", "25_training",
+      "26_training", "27_training", "28_training", "29_training", "30_training",
+      "31_training", "32_training", "33_training", "34_training", "35_training"
+    ],
+    "held_out": [
+      "36_training", "37_training", "38_training", "39_training", "40_training"
+    ]
+  },
+  "Drishti-GS": {
+    "_comment": "All 50 official Drishti-GS training images. Split 35 dev / 15 held-out by seed 42.",
+    "development": [
+      "drishtiGS_002", "drishtiGS_004", "drishtiGS_008", "drishtiGS_010",
+      "drishtiGS_012", "drishtiGS_015", "drishtiGS_016", "drishtiGS_017",
+      "drishtiGS_018", "drishtiGS_022", "drishtiGS_024", "drishtiGS_026",
+      "drishtiGS_031", "drishtiGS_032", "drishtiGS_033", "drishtiGS_035",
+      "drishtiGS_036", "drishtiGS_037", "drishtiGS_038", "drishtiGS_040",
+      "drishtiGS_041", "drishtiGS_042", "drishtiGS_044", "drishtiGS_045",
+      "drishtiGS_046", "drishtiGS_047", "drishtiGS_049", "drishtiGS_051",
+      "drishtiGS_057", "drishtiGS_058", "drishtiGS_060", "drishtiGS_061",
+      "drishtiGS_062", "drishtiGS_063", "drishtiGS_064"
+    ],
+    "held_out": [
+      "drishtiGS_066", "drishtiGS_068", "drishtiGS_069", "drishtiGS_075",
+      "drishtiGS_076", "drishtiGS_080", "drishtiGS_081", "drishtiGS_084",
+      "drishtiGS_088", "drishtiGS_089", "drishtiGS_090", "drishtiGS_092",
+      "drishtiGS_094", "drishtiGS_098", "drishtiGS_101"
+    ]
+  },
+  "BundledDemo": {
+    "development": [
+      "sample_01_dev", "sample_02_dev", "sample_03_dev"
+    ],
+    "held_out": [
+      "sample_04_held_out"
+    ]
+  }
+}

@@ -1,0 +1,3 @@
+pipeline,target_resolution,mean_latency_ms,median_latency_ms,std_latency_ms,min_latency_ms,max_latency_ms,n_timed,n_warmup
+Track A: Vessel Extraction (DRIVE),565 x 584,535.1,539.7,10.3,517.5,545.1,5,3
+Track B: Disc & Cup (Drishti-GS),~1752 x 2045,2864.7,2831.5,71.5,2782.4,2988.9,5,3

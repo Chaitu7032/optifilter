@@ -1,0 +1,9 @@
+node_modules/
+backend/data/datasets/
+backend/data/artifacts/
+backend/data/optifilter.db
+__pycache__/
+*.pyc
+.pytest_cache/
+dist/
+.env
