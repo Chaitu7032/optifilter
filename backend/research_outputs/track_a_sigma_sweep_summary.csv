@@ -1,0 +1,6 @@
+configuration,mean_dice,std_dice,median_dice,iqr_dice,mean_iou,mean_sensitivity,mean_specificity,mean_precision,mean_runtime_ms,median_runtime_ms
+single_sigma_1.5,0.651,0.0652,0.6682,0.0507,0.4856,0.7512,0.9226,0.5822,63.993,62.5783
+single_sigma_2.0,0.6854,0.0732,0.7143,0.0572,0.5254,0.7178,0.9461,0.6736,75.5805,74.7736
+single_sigma_2.5,0.6672,0.0693,0.6979,0.0809,0.5042,0.6239,0.9658,0.7457,81.8777,82.2054
+single_sigma_3.0,0.58,0.086,0.6108,0.06,0.4129,0.4737,0.9802,0.7894,84.1456,83.3735
+multiscale_default,0.6452,0.0617,0.6673,0.0624,0.479,0.7188,0.9295,0.5935,571.9077,568.3772

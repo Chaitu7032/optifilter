@@ -79,6 +79,8 @@ def test_vessel_analysis_endpoint_uploaded_image():
     data = res.json()
     assert data["success"] is True
     assert "vessel_density" in data
+    assert "dr_status" in data
+    assert "dr_assessment" in data
     assert "telemetry" in data
     assert "intermediate_images" in data
     assert "frangi_heatmap" in data["intermediate_images"]
@@ -99,6 +101,8 @@ def test_disc_cup_analysis_endpoint_uploaded_image():
     assert data["success"] is True
     assert data["vertical_cdr"] is not None
     assert 0.0 < data["vertical_cdr"] <= 1.0
+    assert "glaucoma_status" in data
+    assert "glaucoma_assessment" in data
     # Ground truth metrics must be strictly None when no reference mask is provided
     assert data["disc_metrics"] is None
     assert data["cup_metrics"] is None

@@ -36,6 +36,15 @@ export interface VesselAnalysisResult {
   fov_pixel_count: number;
   vessel_pixel_count: number;
   vessel_density: number;
+  dr_status?: string;
+  dr_assessment?: {
+    status: string;
+    risk_level: 'nominal' | 'low_density' | 'high_density' | 'low' | 'moderate' | 'high' | string;
+    vessel_density_pct: number;
+    description: string;
+    threshold_used: string;
+    disclaimer?: string;
+  };
   threshold_info: Record<string, any>;
   parameters: Record<string, any>;
   telemetry: PipelineTelemetry;
@@ -53,6 +62,8 @@ export interface VesselAnalysisResult {
 
 export interface DiscCupAnalysisResult {
   success: boolean;
+  outcome_status?: 'SUCCESS' | 'WARNING' | 'FALLBACK' | 'FAILED' | string;
+  localization_checks?: Record<string, any>;
   image_metadata: ImageMetadata;
   is_fov_estimated: boolean;
   disc_center: { x: number; y: number };
@@ -61,6 +72,14 @@ export interface DiscCupAnalysisResult {
   disc_area_px: number;
   cup_area_px: number;
   vertical_cdr: number | null;
+  glaucoma_status?: string;
+  glaucoma_assessment?: {
+    status: string;
+    risk_level: 'nominal' | 'borderline' | 'elevated' | 'low' | 'moderate' | 'high' | 'unknown' | string;
+    description: string;
+    threshold_used: string;
+    disclaimer?: string;
+  };
   warnings: string[];
   telemetry: PipelineTelemetry;
   disc_metrics?: SegmentationMetrics | null;

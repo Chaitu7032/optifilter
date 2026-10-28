@@ -105,12 +105,12 @@ def localize_optic_disc_center(
 
     meta = {
         "channel_used": channel_used,
-        "closing_radius": closing_radius,
-        "smooth_sigma": round(smooth_sigma, 2),
-        "red_peak": (rx, ry),
-        "green_peak": (gx, gy),
+        "closing_radius": int(closing_radius),
+        "smooth_sigma": round(float(smooth_sigma), 2),
+        "red_peak": (int(rx), int(ry)),
+        "green_peak": (int(gx), int(gy)),
         "peak_agreement_px": round(float(dist), 1),
-        "fallback_triggered": dist > agreement_threshold,
+        "fallback_triggered": bool(dist > agreement_threshold),
     }
     return (center_x, center_y), (smoothed_out * 255.0).astype(np.uint8), meta
 
@@ -135,6 +135,54 @@ def segment_optic_disc_and_cup(
     params = {**DEFAULT_DISC_CUP_CONFIG, **(config or {})}
     profiler = PipelineProfiler(include_memory=True)
     profiler.start()
+
+    # ── Classification Helper ──────────────────────────────────────────────────────
+    def _assess_glaucoma(vcdr: Optional[float], outcome_status: str = "SUCCESS") -> Dict[str, Any]:
+        """Return a structured, cautious clinical assessment based on vCDR."""
+        disclaimer = (
+            "Experimental vCDR estimate. This image-processing result is not a diagnosis. "
+            "Clinical interpretation requires validated methods and professional ophthalmic assessment."
+        )
+        if vcdr is None or outcome_status in ("FAILED", "FALLBACK"):
+            status_label = "Unsegmented / Fallback" if outcome_status == "FALLBACK" else "Indeterminate"
+            return {
+                "status": status_label,
+                "risk_level": "unknown",
+                "description": "vCDR estimate unavailable or unvalidated due to fallback/unsegmented disc or cup.",
+                "threshold_used": "N/A",
+                "disclaimer": disclaimer,
+            }
+        if vcdr >= 0.65:
+            return {
+                "status": "Elevated vCDR (>= 0.65)",
+                "risk_level": "elevated",
+                "description": (
+                    f"Experimental vertical cup-to-disc ratio (vCDR = {vcdr:.4f} >= 0.65). "
+                    "Falls above conventional exploratory threshold; not a definitive glaucoma diagnosis."
+                ),
+                "threshold_used": "vCDR >= 0.65",
+                "disclaimer": disclaimer,
+            }
+        elif vcdr >= 0.50:
+            return {
+                "status": "Borderline vCDR (0.50 - 0.65)",
+                "risk_level": "borderline",
+                "description": (
+                    f"Experimental vertical cup-to-disc ratio (vCDR = {vcdr:.4f}). "
+                    "Falls in intermediate exploratory interval; clinical examination required."
+                ),
+                "threshold_used": "0.50 <= vCDR < 0.65",
+                "disclaimer": disclaimer,
+            }
+        else:
+            return {
+                "status": "Nominal vCDR (< 0.50)",
+                "risk_level": "nominal",
+                "description": f"Experimental vertical cup-to-disc ratio (vCDR = {vcdr:.4f} < 0.50).",
+                "threshold_used": "vCDR < 0.50",
+                "disclaimer": disclaimer,
+            }
+
 
     # ── 1. Validation & Preprocessing ─────────────────────────────────────────
     profiler.start_stage("preprocessing")
@@ -179,59 +227,78 @@ def segment_optic_disc_and_cup(
     disc_contour_pts = []
     disc_success = False
     disc_warning = None
+    disc_fallback_applied = False
 
-    try:
-        # Regional ROI around localized center
-        roi_rad = int(init_disc_radius * 1.5)
-        y1, y2 = max(0, center_y - roi_rad), min(h, center_y + roi_rad)
-        x1, x2 = max(0, center_x - roi_rad), min(w, center_x + roi_rad)
+    if params.get("precomputed_disc_mask") is not None:
+        disc_mask = params["precomputed_disc_mask"].copy()
+        disc_success = bool(params.get("precomputed_disc_success", True))
+        disc_fallback_applied = bool(params.get("precomputed_disc_fallback", False))
+        disc_warning = params.get("precomputed_disc_warning")
+    else:
+        try:
+            # Regional ROI around localized center
+            roi_rad = int(init_disc_radius * 1.5)
+            y1, y2 = max(0, center_y - roi_rad), min(h, center_y + roi_rad)
+            x1, x2 = max(0, center_x - roi_rad), min(w, center_x + roi_rad)
 
-        # Red channel inside ROI + morphological vessel suppression
-        roi_img = rgb_image[y1:y2, x1:x2, 0]
-        c_ksize = max(5, int(0.015 * min_dim))
-        c_elem  = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (c_ksize * 2 + 1, c_ksize * 2 + 1))
-        roi_closed = cv2.morphologyEx(roi_img, cv2.MORPH_CLOSE, c_elem)
+            # Red channel inside ROI + morphological vessel suppression
+            roi_img = rgb_image[y1:y2, x1:x2, 0]
+            c_ksize = max(5, int(0.015 * min_dim))
+            c_elem  = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (c_ksize * 2 + 1, c_ksize * 2 + 1))
+            roi_closed = cv2.morphologyEx(roi_img, cv2.MORPH_CLOSE, c_elem)
 
-        # Otsu threshold inside ROI
-        _, roi_thresh = cv2.threshold(roi_closed, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            # Otsu threshold inside ROI
+            _, roi_thresh = cv2.threshold(roi_closed, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-        # Keep largest connected component inside ROI
-        n_lbls, lbls, stats, _ = cv2.connectedComponentsWithStats(roi_thresh)
-        if n_lbls > 1:
-            largest_lbl = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
-            roi_disc = (lbls == largest_lbl).astype(np.uint8) * 255
-            smooth_ksize = max(5, int(0.010 * min_dim))
-            s_elem = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (smooth_ksize, smooth_ksize))
-            roi_disc = cv2.morphologyEx(roi_disc, cv2.MORPH_CLOSE, s_elem)
+            # Keep largest connected component inside ROI
+            disc_fallback_applied = False
+            n_lbls, lbls, stats, _ = cv2.connectedComponentsWithStats(roi_thresh)
+            if n_lbls > 1:
+                largest_lbl = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
+                roi_disc = (lbls == largest_lbl).astype(np.uint8) * 255
+                smooth_ksize = max(5, int(0.010 * min_dim))
+                s_elem = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (smooth_ksize, smooth_ksize))
+                roi_disc = cv2.morphologyEx(roi_disc, cv2.MORPH_CLOSE, s_elem)
 
-            # Plausibility: component must be reasonably disc-sized
-            disc_roi_area = np.count_nonzero(roi_disc)
-            expected_min_area = int(np.pi * (init_disc_radius * 0.4) ** 2)
-            if disc_roi_area >= expected_min_area:
-                disc_mask[y1:y2, x1:x2] = roi_disc
-                disc_success = True
+                # Plausibility: component must be reasonably disc-sized
+                disc_roi_area = np.count_nonzero(roi_disc)
+                expected_min_area = int(np.pi * (init_disc_radius * 0.4) ** 2)
+                expected_max_area = int(np.pi * (init_disc_radius * 2.2) ** 2)
+
+                if expected_min_area <= disc_roi_area <= expected_max_area:
+                    disc_mask[y1:y2, x1:x2] = roi_disc
+                    disc_success = True
+                else:
+                    disc_warning = f"ROI Otsu area ({disc_roi_area}px) outside plausible bounds; circular prior fallback used."
+                    rr, cc = disk((center_y, center_x), init_disc_radius, shape=(h, w))
+                    disc_mask[rr, cc] = 255
+                    disc_fallback_applied = True
             else:
-                disc_warning = "ROI Otsu component too small; falling back to physiological circular prior."
+                disc_warning = "No distinct ROI component; circular prior fallback used."
                 rr, cc = disk((center_y, center_x), init_disc_radius, shape=(h, w))
                 disc_mask[rr, cc] = 255
-        else:
+                disc_fallback_applied = True
+
+            # Extract disc contour for visualization
+            d_cnts, _ = cv2.findContours(disc_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if d_cnts:
+                largest_d = max(d_cnts, key=cv2.contourArea)
+                disc_contour_pts = [[int(pt[0][0]), int(pt[0][1])] for pt in largest_d]
+
+        except Exception as e:
             rr, cc = disk((center_y, center_x), init_disc_radius, shape=(h, w))
             disc_mask[rr, cc] = 255
-            disc_warning = "No distinct ROI component; used circular prior."
-
-        # Extract disc contour for visualization
-        d_cnts, _ = cv2.findContours(disc_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if d_cnts:
-            largest_d = max(d_cnts, key=cv2.contourArea)
-            disc_contour_pts = [[int(pt[0][0]), int(pt[0][1])] for pt in largest_d]
-
-    except Exception as e:
-        rr, cc = disk((center_y, center_x), init_disc_radius, shape=(h, w))
-        disc_mask[rr, cc] = 255
-        disc_warning = f"Disc segmentation error: {str(e)}; fallback circle used."
+            disc_fallback_applied = True
+            disc_warning = f"Disc segmentation error: {str(e)}; fallback circle used."
 
     # Intersect disc with FOV
     disc_mask = (disc_mask & (valid_fov > 0)).astype(np.uint8) * 255
+    disc_area_actual = int(np.count_nonzero(disc_mask > 0))
+    fov_area = int(np.count_nonzero(valid_fov > 0))
+    area_plausible = bool(0.003 * fov_area <= disc_area_actual <= 0.20 * fov_area) if fov_area > 0 else True
+    near_boundary = bool(center_x < 0.05 * w or center_x > 0.95 * w or center_y < 0.05 * h or center_y > 0.95 * h)
+    center_inside_fov = bool(0 <= center_y < h and 0 <= center_x < w and valid_fov[center_y, center_x] > 0)
+
     profiler.end_stage("disc_contour")
 
     # ── 4. Optic Cup Segmentation ──────────────────────────────────────────────
@@ -248,32 +315,31 @@ def segment_optic_disc_and_cup(
             lab = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2LAB)
             cup_feature = 255 - lab[:, :, 1]  # Invert a* so paler cup has higher values
         elif cup_channel_name == "green":
-            cup_feature = rgb_image[:, :, 1]  # Green channel: cup is brighter / more yellow-green
+            cup_feature = rgb_image[:, :, 1]  # Green channel
         elif cup_channel_name in ("inverted_red", "inv_red"):
             cup_feature = 255 - rgb_image[:, :, 0]
         else:
-            cup_feature = rgb_image[:, :, 1]  # Default: green
+            cup_feature = rgb_image[:, :, 1]
 
-        # ── Adaptive thresholding for cup ─────────────────────────────────────
-        # Standard Otsu on disc-region pixels fails when the cup occupies a large
-        # fraction of the disc (high-vCDR glaucoma), because the distribution becomes
-        # unimodal or the minority rim class skews the threshold too high.
-        # Strategy:
-        #   - Run Otsu normally.
-        #   - Also compute the 60th percentile of disc-region pixel values.
-        #   - Use the LOWER of the two thresholds — this ensures large cups are not
-        #     missed when Otsu over-estimates the threshold.
+        # Cup Threshold Selection
+        cup_thresh_method = params.get("cup_threshold_method", "adaptive_min")
         disc_pixels = cup_feature[disc_indices].astype(np.float32)
+
         if len(disc_pixels) > 0:
             otsu_val, _ = cv2.threshold(
                 disc_pixels.astype(np.uint8), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
             )
-            # Percentile threshold: at vCDR~0.8, cup covers ~64% of disc area
-            # so the 55th percentile of disc pixels is a robust lower bound for cup pallor
-            percentile_val = float(np.percentile(disc_pixels, 55))
+            pct_param = float(params.get("cup_percentile", 55.0))
+            percentile_val = float(np.percentile(disc_pixels, pct_param))
 
-            # Adaptive: use lower threshold to avoid missing large cups
-            effective_threshold = min(float(otsu_val), percentile_val)
+            if cup_thresh_method == "otsu":
+                effective_threshold = float(otsu_val)
+            elif cup_thresh_method == "percentile":
+                effective_threshold = percentile_val
+            elif cup_thresh_method == "adaptive_min":
+                effective_threshold = min(float(otsu_val), percentile_val)
+            else:
+                effective_threshold = min(float(otsu_val), percentile_val)
 
             raw_cup = (cup_feature.astype(np.float32) > effective_threshold) & (disc_mask > 0)
 
@@ -283,29 +349,48 @@ def segment_optic_disc_and_cup(
             cleaned_cup = cv2.morphologyEx(raw_cup.astype(np.uint8) * 255, cv2.MORPH_OPEN, k_elem)
             cleaned_cup = cv2.morphologyEx(cleaned_cup, cv2.MORPH_CLOSE, k_elem)
 
-            # Select the connected component closest to disc center
+            # Connected Component Selection
+            comp_selection = params.get("component_selection", "combined_score")
             num_cup_labels, cup_labels, cup_stats, cup_centroids = cv2.connectedComponentsWithStats(
                 cleaned_cup, connectivity=8
             )
+
             if num_cup_labels > 1:
                 disc_cy = float(np.mean(disc_indices[0]))
                 disc_cx = float(np.mean(disc_indices[1]))
                 best_label = 1
-                min_dist = float("inf")
-                for lbl in range(1, num_cup_labels):
-                    area = cup_stats[lbl, cv2.CC_STAT_AREA]
-                    if area < 15:
-                        continue
-                    cent_x, cent_y = cup_centroids[lbl]
-                    dist = (cent_x - disc_cx) ** 2 + (cent_y - disc_cy) ** 2
-                    if dist < min_dist:
-                        min_dist = dist
-                        best_label = lbl
+
+                if comp_selection == "largest_area":
+                    best_label = 1 + int(np.argmax(cup_stats[1:, cv2.CC_STAT_AREA]))
+                elif comp_selection == "center_distance":
+                    min_dist = float("inf")
+                    for lbl in range(1, num_cup_labels):
+                        area = cup_stats[lbl, cv2.CC_STAT_AREA]
+                        if area < 15:
+                            continue
+                        cent_x, cent_y = cup_centroids[lbl]
+                        dist = (cent_x - disc_cx) ** 2 + (cent_y - disc_cy) ** 2
+                        if dist < min_dist:
+                            min_dist = dist
+                            best_label = lbl
+                else:  # "combined_score"
+                    best_score = -1.0
+                    for lbl in range(1, num_cup_labels):
+                        area = float(cup_stats[lbl, cv2.CC_STAT_AREA])
+                        if area < 15:
+                            continue
+                        cent_x, cent_y = cup_centroids[lbl]
+                        norm_dist = np.sqrt((cent_x - disc_cx) ** 2 + (cent_y - disc_cy) ** 2) / max(init_disc_radius, 1.0)
+                        score = area / (1.0 + norm_dist ** 2)
+                        if score > best_score:
+                            best_score = score
+                            best_label = lbl
+
                 cup_mask = np.where(cup_labels == best_label, 255, 0).astype(np.uint8)
             else:
                 cup_mask = cleaned_cup
 
-        # ── Strict Containment: Cup MUST be inside Disc ───────────────────────
+        # Strict Containment: Cup MUST be inside Disc
         if params.get("enforce_containment", True):
             cup_mask = (cup_mask & (disc_mask > 0)).astype(np.uint8) * 255
 
@@ -322,6 +407,16 @@ def segment_optic_disc_and_cup(
 
     # ── 5. Biomarkers: Diameters, Areas, vCDR ─────────────────────────────────
     cdr_data = compute_vertical_cdr(disc_mask, cup_mask)
+
+    # ── Outcome Status Classification ─────────────────────────────────────────
+    if (not center_inside_fov) or disc_area_actual == 0:
+        outcome_status = "FAILED"
+    elif disc_fallback_applied:
+        outcome_status = "FALLBACK"
+    elif (not area_plausible) or near_boundary or (loc_meta.get("fallback_triggered", False)):
+        outcome_status = "WARNING"
+    else:
+        outcome_status = "SUCCESS"
 
     # ── 6. Evaluation against Ground Truth ────────────────────────────────────
     disc_metrics = None
@@ -378,17 +473,29 @@ def segment_optic_disc_and_cup(
         )
         intermediate_images["overlay"] = numpy_to_base64_png(overlay)
 
+    localization_checks = {
+        "center_inside_fov": center_inside_fov,
+        "near_boundary": near_boundary,
+        "area_plausible": area_plausible,
+        "disc_area_px": disc_area_actual,
+        "disc_fallback_applied": disc_fallback_applied,
+        "peak_agreement_px": loc_meta.get("peak_agreement_px"),
+    }
+
     return {
-        "success": cdr_data["is_valid"],
+        "success": bool(cdr_data["is_valid"] and outcome_status != "FAILED"),
+        "outcome_status": outcome_status,
+        "localization_checks": localization_checks,
         "image_metadata": img_meta,
-        "is_fov_estimated": is_fov_estimated,
-        "disc_center": {"x": center_x, "y": center_y},
+        "is_fov_estimated": bool(is_fov_estimated),
+        "disc_center": {"x": int(center_x), "y": int(center_y)},
         "disc_diameter_vertical_px": cdr_data["disc_vertical_diameter"],
         "cup_diameter_vertical_px": cdr_data["cup_vertical_diameter"],
         "disc_area_px": cdr_data["disc_area"],
         "cup_area_px": cdr_data["cup_area"],
         "vertical_cdr": cdr_data["vcdr"],
-        "gt_vertical_cdr": gt_vcdr,
+        "glaucoma_status": _assess_glaucoma(cdr_data.get("vcdr"), outcome_status)["status"],
+        "glaucoma_assessment": _assess_glaucoma(cdr_data.get("vcdr"), outcome_status),
         "localization_meta": loc_meta,
         "warnings": [w for w in [disc_warning, cup_warning, cdr_data.get("warning")] if w],
         "telemetry": telemetry,

@@ -206,3 +206,150 @@ def calculate_cdr_error(
     if pred_vcdr is None or gt_vcdr is None:
         return None
     return round(float(abs(pred_vcdr - gt_vcdr)), 4)
+
+
+def compute_bland_altman(
+    y_pred: np.ndarray,
+    y_ref: np.ndarray,
+) -> Dict[str, float]:
+    """
+    Performs standard Bland-Altman agreement analysis on paired measurements.
+    
+    Formula:
+        diff = y_pred - y_ref
+        bias = mean(diff)
+        sd_diff = sample standard deviation (ddof=1)
+        loa_lower = bias - 1.96 * sd_diff
+        loa_upper = bias + 1.96 * sd_diff
+    """
+    p = np.asarray(y_pred, dtype=float)
+    r = np.asarray(y_ref, dtype=float)
+    if len(p) != len(r) or len(p) < 2:
+        return {
+            "n": len(p),
+            "bias": 0.0,
+            "sd_diff": 0.0,
+            "loa_lower": 0.0,
+            "loa_upper": 0.0,
+        }
+
+    diffs = p - r
+    bias = float(np.mean(diffs))
+    sd_diff = float(np.std(diffs, ddof=1))
+    loa_lower = bias - 1.96 * sd_diff
+    loa_upper = bias + 1.96 * sd_diff
+
+    return {
+        "n": int(len(p)),
+        "bias": round(bias, 4),
+        "sd_diff": round(sd_diff, 4),
+        "loa_lower": round(loa_lower, 4),
+        "loa_upper": round(loa_upper, 4),
+    }
+
+
+def compute_cdr_summary_statistics(
+    y_pred: np.ndarray,
+    y_ref: np.ndarray,
+) -> Dict[str, Any]:
+    """
+    Computes complete statistical agreement suite for vCDR:
+    - Sample count (N)
+    - Mean Absolute Error (MAE)
+    - Median Absolute Error (MedAE)
+    - Root Mean Square Error (RMSE)
+    - Pearson correlation (r, p-value)
+    - Spearman rank correlation (rho, p-value)
+    - Bland-Altman agreement metrics
+    """
+    from scipy import stats
+
+    p = np.asarray(y_pred, dtype=float)
+    r = np.asarray(y_ref, dtype=float)
+    n = len(p)
+
+    if n == 0 or len(r) != n:
+        return {
+            "n": 0,
+            "mae": None,
+            "medae": None,
+            "rmse": None,
+            "pearson_r": None,
+            "pearson_p": None,
+            "spearman_rho": None,
+            "spearman_p": None,
+            "bland_altman": None,
+        }
+
+    abs_errs = np.abs(p - r)
+    mae = float(np.mean(abs_errs))
+    medae = float(np.median(abs_errs))
+    rmse = float(np.sqrt(np.mean((p - r) ** 2)))
+
+    # Correlations (check for zero variance / constant arrays)
+    if n >= 2 and np.std(p) > 1e-9 and np.std(r) > 1e-9:
+        pearson_r, pearson_p = stats.pearsonr(p, r)
+        spearman_rho, spearman_p = stats.spearmanr(p, r)
+    else:
+        pearson_r, pearson_p = 0.0, 1.0
+        spearman_rho, spearman_p = 0.0, 1.0
+
+    ba = compute_bland_altman(p, r)
+
+    return {
+        "n": int(n),
+        "mae": round(mae, 4),
+        "medae": round(medae, 4),
+        "rmse": round(rmse, 4),
+        "pearson_r": round(float(pearson_r), 4),
+        "pearson_p": round(float(pearson_p), 4),
+        "spearman_rho": round(float(spearman_rho), 4),
+        "spearman_p": round(float(spearman_p), 4),
+        "bland_altman": ba,
+    }
+
+
+def aggregate_statistics(values: np.ndarray) -> Dict[str, float]:
+    """
+    Calculates sample summary statistics:
+    - n
+    - mean
+    - sample standard deviation (ddof=1)
+    - median
+    - interquartile range (IQR)
+    - 95% Confidence Interval for the mean (t-distribution)
+    """
+    from scipy import stats
+
+    v = np.asarray(values, dtype=float)
+    v = v[~np.isnan(v)]
+    n = len(v)
+
+    if n == 0:
+        return {"n": 0, "mean": 0.0, "std": 0.0, "median": 0.0, "iqr": 0.0, "ci95_low": 0.0, "ci95_high": 0.0}
+
+    mean_val = float(np.mean(v))
+    median_val = float(np.median(v))
+    iqr_val = float(np.percentile(v, 75) - np.percentile(v, 25))
+
+    if n > 1:
+        std_val = float(np.std(v, ddof=1))
+        se = std_val / np.sqrt(n)
+        ci_span = float(stats.t.ppf(0.975, df=n - 1) * se)
+        ci95_low = mean_val - ci_span
+        ci95_high = mean_val + ci_span
+    else:
+        std_val = 0.0
+        ci95_low = mean_val
+        ci95_high = mean_val
+
+    return {
+        "n": int(n),
+        "mean": round(mean_val, 4),
+        "std": round(std_val, 4),
+        "median": round(median_val, 4),
+        "iqr": round(iqr_val, 4),
+        "ci95_low": round(ci95_low, 4),
+        "ci95_high": round(ci95_high, 4),
+    }
+

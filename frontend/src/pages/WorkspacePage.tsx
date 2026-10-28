@@ -4,18 +4,20 @@ import {
   Play,
   RotateCw,
   FolderOpen,
-  CheckCircle,
   AlertTriangle,
-  FileText,
-  Sliders,
   FileCheck,
   ChevronDown,
   ChevronUp,
+  Activity,
+  Eye,
+  ArrowRight,
 } from 'lucide-react';
 import { ImageViewer } from '../components/ImageViewer';
 import { MetricsBadge } from '../components/MetricsBadge';
 import { StageGallery } from '../components/StageGallery';
 import { ExecutionTimer } from '../components/ExecutionTimer';
+import { GlaucomaAssessmentCard, DiabeticRetinopathyCard } from '../components/ClinicalAssessmentCard';
+import { useWorkstationMode } from '../context/WorkstationContext';
 import {
   inspectImage,
   runVesselAnalysis,
@@ -29,7 +31,9 @@ import {
 } from '../types';
 
 export const WorkspacePage: React.FC = () => {
-  // Datasets & Sample Selection (Clean initial state - zero demo samples)
+  const { isClinic } = useWorkstationMode();
+
+  // Datasets & Sample Selection
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
   const [selectedDataset, setSelectedDataset] = useState<string>('');
   const [selectedItemId, setSelectedItemId] = useState<string>('');
@@ -58,7 +62,7 @@ export const WorkspacePage: React.FC = () => {
   // Current Active Image in Viewer
   const [activeStageKey, setActiveStageKey] = useState<string>('overlay');
 
-  // Load available datasets on mount (only real installed datasets)
+  // Load available datasets on mount
   useEffect(() => {
     fetchDatasets()
       .then((data) => {
@@ -112,7 +116,7 @@ export const WorkspacePage: React.FC = () => {
 
   const handleRunAnalysis = async () => {
     if (!uploadedFile && (!selectedDataset || !selectedItemId)) {
-      setErrorMessage('Please upload a retinal fundus scan before starting analysis.');
+      setErrorMessage('Please upload a retinal fundus scan or select a dataset scan before running analysis.');
       return;
     }
 
@@ -150,7 +154,7 @@ export const WorkspacePage: React.FC = () => {
     }
   };
 
-  // Compute currently displayed image and overlay in ImageViewer
+  // Compute currently displayed image, mask and overlay in ImageViewer
   const currentIntermediates =
     activeTrack === 'vessels'
       ? vesselResult?.intermediate_images
@@ -165,50 +169,82 @@ export const WorkspacePage: React.FC = () => {
   }
 
   const overlayImg = currentIntermediates?.overlay;
+  const maskImg =
+    activeTrack === 'vessels'
+      ? vesselResult?.intermediate_images?.binary_mask
+      : discCupResult?.intermediate_images?.disc_mask;
 
   // Prepare stage items for gallery
   const stageItems =
     activeTrack === 'vessels' && vesselResult
       ? [
-          { id: 'original', label: 'Original Fundus', imageUri: vesselResult.intermediate_images.original },
-          { id: 'green_channel', label: 'Green Channel', imageUri: vesselResult.intermediate_images.green_channel },
-          { id: 'clahe_enhanced', label: 'CLAHE Enhanced', imageUri: vesselResult.intermediate_images.clahe_enhanced },
-          { id: 'frangi_heatmap', label: 'Frangi Vesselness', imageUri: vesselResult.intermediate_images.frangi_heatmap },
-          { id: 'binary_mask', label: 'Vessel Mask', imageUri: vesselResult.intermediate_images.binary_mask },
-          { id: 'overlay', label: 'Vessel Overlay', imageUri: vesselResult.intermediate_images.overlay },
+          { id: 'original', label: '1. Original Fundus', imageUri: vesselResult.intermediate_images.original },
+          { id: 'green_channel', label: '2. Green Channel', imageUri: vesselResult.intermediate_images.green_channel },
+          { id: 'clahe_enhanced', label: '3. CLAHE Enhanced', imageUri: vesselResult.intermediate_images.clahe_enhanced },
+          { id: 'frangi_heatmap', label: '4. Frangi Response', imageUri: vesselResult.intermediate_images.frangi_heatmap },
+          { id: 'binary_mask', label: '5. Vessel Mask', imageUri: vesselResult.intermediate_images.binary_mask },
+          { id: 'overlay', label: '6. Segmented Overlay', imageUri: vesselResult.intermediate_images.overlay },
         ]
       : activeTrack === 'disc_cup' && discCupResult
       ? [
-          { id: 'original', label: 'Original Fundus', imageUri: discCupResult.intermediate_images.original },
-          { id: 'smoothed_response', label: 'Smoothed Luminance', imageUri: discCupResult.intermediate_images.smoothed_response },
-          { id: 'disc_mask', label: 'Disc Mask', imageUri: discCupResult.intermediate_images.disc_mask },
-          { id: 'cup_mask', label: 'Cup Mask', imageUri: discCupResult.intermediate_images.cup_mask },
-          { id: 'overlay', label: 'Disc & Cup Overlay', imageUri: discCupResult.intermediate_images.overlay },
+          { id: 'original', label: '1. Original Fundus', imageUri: discCupResult.intermediate_images.original },
+          { id: 'smoothed_response', label: '2. Luminance Smooth', imageUri: discCupResult.intermediate_images.smoothed_response },
+          { id: 'disc_mask', label: '3. Disc Mask', imageUri: discCupResult.intermediate_images.disc_mask },
+          { id: 'cup_mask', label: '4. Cup Mask', imageUri: discCupResult.intermediate_images.cup_mask },
+          { id: 'overlay', label: '5. Disc & Cup Overlay', imageUri: discCupResult.intermediate_images.overlay },
         ]
       : [];
 
   const hasImageLoaded = uploadedFile !== null || (selectedDataset !== '' && selectedItemId !== '');
 
   return (
-    <div className="max-w-[1720px] mx-auto px-4 sm:px-6 py-5 space-y-4">
-      {/* Top Controls Bar */}
-      <div className="bg-white border border-[#DFE4DF] rounded-lg p-3.5 flex flex-wrap items-center justify-between gap-4">
+    <div className="max-w-[1780px] mx-auto px-3 sm:px-6 py-5 space-y-4">
+      {/* Student Mode Guided Stepper Banner */}
+      {!isClinic && (
+        <div className="bg-white border border-[#E2E8F0] rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="w-6 h-6 rounded-md bg-[#059669]/10 text-[#059669] flex items-center justify-center font-bold text-xs">
+              🎓
+            </span>
+            <div>
+              <span className="font-semibold text-[#0F172A]">Student Demonstration Workflow: </span>
+              <span className="text-[#64748B]">
+                Select a retinal scan, choose the target clinical track, run the deterministic DIP pipeline, and inspect the structural biomarkers.
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#64748B] bg-[#F8FAFC] px-2.5 py-1 rounded-md border border-[#E2E8F0]">
+            <span>1. Select Scan</span>
+            <ArrowRight className="w-3 h-3 text-[#059669]" />
+            <span>2. Track</span>
+            <ArrowRight className="w-3 h-3 text-[#059669]" />
+            <span>3. Segment</span>
+            <ArrowRight className="w-3 h-3 text-[#059669]" />
+            <span className="text-[#059669] font-bold">4. Biomarkers</span>
+          </div>
+        </div>
+      )}
+
+      {/* Main Controls Command Bar */}
+      <div className="bg-white border border-[#E2E8F0] rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-4 shadow-xs">
         {/* Dataset & Sample Picker */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-1.5 text-xs">
-            <FolderOpen className="w-4 h-4 text-[#286B56]" />
-            <span className="font-semibold text-[#202824]">Source:</span>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-1.5 text-xs text-[#64748B] mr-1">
+            <FolderOpen className="w-4 h-4 text-[#059669]" />
+            <span className="font-semibold text-[#0F172A]">Input Source:</span>
           </div>
 
           {/* Primary Action: Local File Upload */}
-          <label className={`flex items-center gap-1.5 text-xs rounded-md px-3 py-1.5 cursor-pointer transition-colors border ${
-            uploadedFile
-              ? 'bg-[#DCEBE3] text-[#286B56] border-[#286B56]/40 font-medium'
-              : 'bg-white hover:bg-[#F5F6F4] text-[#202824] border-[#DFE4DF]'
-          }`}>
-            <Upload className="w-3.5 h-3.5 text-[#286B56]" />
-            <span className="truncate max-w-[220px]">
-              {uploadedFile ? uploadedFile.name : 'Upload Fundus Scan'}
+          <label
+            className={`flex items-center gap-1.5 text-xs rounded-lg px-3 py-1.5 cursor-pointer transition-all border ${
+              uploadedFile
+                ? 'bg-[#10B981]/15 text-[#059669] border-[#10B981]/40 font-semibold shadow-2xs'
+                : 'bg-[#F8FAFC] hover:bg-white text-[#0F172A] border-[#CBD5E1]'
+            }`}
+          >
+            <Upload className="w-3.5 h-3.5 text-[#059669]" />
+            <span className="truncate max-w-[200px]">
+              {uploadedFile ? uploadedFile.name : 'Upload Local Scan'}
             </span>
             <input
               type="file"
@@ -218,10 +254,10 @@ export const WorkspacePage: React.FC = () => {
             />
           </label>
 
-          {/* Installed external dataset selector (only if user installed DRIVE / Drishti-GS) */}
+          {/* Installed External Dataset Selector (DRIVE / Drishti-GS) */}
           {datasets.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-[#69736D]">or installed dataset:</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] text-[#64748B]">or load from:</span>
               <select
                 value={selectedDataset}
                 onChange={(e) => {
@@ -234,9 +270,9 @@ export const WorkspacePage: React.FC = () => {
                     setSelectedItemId('');
                   }
                 }}
-                className="text-xs bg-[#F5F6F4] border border-[#DFE4DF] rounded-md px-2.5 py-1.5 text-[#202824]"
+                className="text-xs bg-white border border-[#CBD5E1] rounded-lg px-2.5 py-1.5 text-[#0F172A] focus:border-[#059669] outline-none cursor-pointer"
               >
-                <option value="">Select Dataset...</option>
+                <option value="">Choose Research Dataset...</option>
                 {datasets.map((d) => (
                   <option key={d.name} value={d.name}>
                     {d.name} ({d.total_images} scans)
@@ -251,7 +287,7 @@ export const WorkspacePage: React.FC = () => {
                     setSelectedItemId(e.target.value);
                     setUploadedFile(null);
                   }}
-                  className="text-xs bg-[#F5F6F4] border border-[#DFE4DF] rounded-md px-2.5 py-1.5 font-mono text-[#202824]"
+                  className="text-xs bg-white border border-[#CBD5E1] rounded-lg px-2.5 py-1.5 font-mono text-[#0F172A] focus:border-[#059669] outline-none cursor-pointer"
                 >
                   {datasets
                     .find((d) => d.name === selectedDataset)
@@ -265,50 +301,52 @@ export const WorkspacePage: React.FC = () => {
             </div>
           )}
 
-          {/* Optional Reference Annotation Toggle */}
+          {/* Reference Ground-Truth Upload Toggle */}
           {uploadedFile && (
             <button
               onClick={() => setShowGtUpload(!showGtUpload)}
-              className="flex items-center gap-1 text-[11px] text-[#69736D] hover:text-[#286B56] px-2 py-1 rounded border border-[#DFE4DF] bg-white transition-colors cursor-pointer"
-              title="Optionally upload a manual expert mask to calculate Dice and IoU metrics"
+              className="flex items-center gap-1 text-[11px] text-[#475569] hover:text-[#0F172A] px-2.5 py-1.5 rounded-lg border border-[#CBD5E1] bg-white transition-colors cursor-pointer"
+              title="Supply an expert manual binary segmentation mask to verify quantitative accuracy (Dice, IoU, Sensitivity)"
             >
-              <FileCheck className="w-3.5 h-3.5 text-[#286B56]" />
-              <span>Reference Annotation Mask</span>
+              <FileCheck className="w-3.5 h-3.5 text-[#059669]" />
+              <span>Reference Annotation</span>
               {showGtUpload ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </button>
           )}
         </div>
 
         {/* Processing Track Selection & Run Button */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center bg-[#F5F6F4] p-0.5 rounded-md border border-[#DFE4DF]">
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center bg-[#F1F5F9] p-0.5 rounded-lg border border-[#E2E8F0]">
             <button
               onClick={() => setActiveTrack('vessels')}
-              className={`px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-all ${
                 activeTrack === 'vessels'
-                  ? 'bg-white text-[#286B56] shadow-2xs font-semibold'
-                  : 'text-[#69736D]'
+                  ? 'bg-white text-[#059669] border border-[#E2E8F0] shadow-xs font-semibold'
+                  : 'text-[#64748B] hover:text-[#0F172A] border border-transparent'
               }`}
             >
-              Track A: Vessels
+              <Activity className="w-3.5 h-3.5" />
+              <span>Track A: Vessels</span>
             </button>
             <button
               onClick={() => setActiveTrack('disc_cup')}
-              className={`px-3 py-1.5 rounded text-xs font-medium cursor-pointer transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-all ${
                 activeTrack === 'disc_cup'
-                  ? 'bg-white text-[#286B56] shadow-2xs font-semibold'
-                  : 'text-[#69736D]'
+                  ? 'bg-white text-[#0284C7] border border-[#E2E8F0] shadow-xs font-semibold'
+                  : 'text-[#64748B] hover:text-[#0F172A] border border-transparent'
               }`}
             >
-              Track B: Disc &amp; Cup
+              <Eye className="w-3.5 h-3.5" />
+              <span>Track B: Disc &amp; Cup</span>
             </button>
           </div>
 
           <button
             onClick={handleRunAnalysis}
             disabled={isProcessing || !hasImageLoaded}
-            className="flex items-center gap-1.5 bg-[#286B56] hover:bg-[#205746] disabled:opacity-40 text-white text-xs font-medium px-4 py-1.5 rounded-md shadow-xs transition-colors cursor-pointer"
-            title={!hasImageLoaded ? 'Upload an image first to run analysis' : 'Execute pipeline'}
+            className="flex items-center gap-1.5 bg-[#059669] hover:bg-[#047857] disabled:opacity-40 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-sm transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+            title={!hasImageLoaded ? 'Upload an image first to run analysis' : 'Execute classical DIP pipeline'}
           >
             {isProcessing ? (
               <>
@@ -327,19 +365,19 @@ export const WorkspacePage: React.FC = () => {
 
       {/* Optional Reference Mask Upload Drawer */}
       {showGtUpload && uploadedFile && (
-        <div className="bg-[#F5F6F4] border border-[#DFE4DF] rounded-lg p-3 text-xs space-y-2">
+        <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-3.5 text-xs space-y-2 animate-in fade-in duration-150">
           <div className="flex items-center justify-between">
-            <span className="font-semibold text-[#202824]">Optional Ground-Truth Verification Mask</span>
-            <span className="text-[11px] text-[#69736D]">
+            <span className="font-semibold text-[#0F172A]">Reference Ground-Truth Mask Verification</span>
+            <span className="text-[11px] text-[#64748B]">
               Supply an expert manual binary segmentation mask to verify quantitative accuracy (Dice, IoU, Sensitivity, Specificity).
             </span>
           </div>
 
           {activeTrack === 'vessels' ? (
-            <div className="flex items-center gap-2">
-              <label className="flex items-center gap-1.5 bg-white border border-[#DFE4DF] rounded px-2.5 py-1 text-xs cursor-pointer text-[#202824]">
-                <Upload className="w-3 h-3 text-[#286B56]" />
-                <span>{vesselGtFile ? vesselGtFile.name : 'Upload Vessel Reference Mask (PNG/TIF)'}</span>
+            <div className="flex items-center gap-2 pt-1">
+              <label className="flex items-center gap-1.5 bg-white border border-[#CBD5E1] rounded-lg px-3 py-1.5 text-xs cursor-pointer text-[#0F172A] hover:border-[#059669]">
+                <Upload className="w-3.5 h-3.5 text-[#059669]" />
+                <span>{vesselGtFile ? vesselGtFile.name : 'Upload Vessel Ground-Truth Mask (PNG/TIF)'}</span>
                 <input
                   type="file"
                   accept=".png,.tif,.tiff,.bmp"
@@ -350,16 +388,16 @@ export const WorkspacePage: React.FC = () => {
               {vesselGtFile && (
                 <button
                   onClick={() => setVesselGtFile(null)}
-                  className="text-[11px] text-[#B54747] hover:underline"
+                  className="text-[11px] text-rose-600 hover:underline cursor-pointer"
                 >
-                  Clear
+                  Clear Mask
                 </button>
               )}
             </div>
           ) : (
-            <div className="flex flex-wrap items-center gap-3">
-              <label className="flex items-center gap-1.5 bg-white border border-[#DFE4DF] rounded px-2.5 py-1 text-xs cursor-pointer text-[#202824]">
-                <Upload className="w-3 h-3 text-[#286B56]" />
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <label className="flex items-center gap-1.5 bg-white border border-[#CBD5E1] rounded-lg px-3 py-1.5 text-xs cursor-pointer text-[#0F172A] hover:border-[#059669]">
+                <Upload className="w-3.5 h-3.5 text-[#059669]" />
                 <span>{discGtFile ? discGtFile.name : 'Upload Disc Reference Mask'}</span>
                 <input
                   type="file"
@@ -368,8 +406,8 @@ export const WorkspacePage: React.FC = () => {
                   className="hidden"
                 />
               </label>
-              <label className="flex items-center gap-1.5 bg-white border border-[#DFE4DF] rounded px-2.5 py-1 text-xs cursor-pointer text-[#202824]">
-                <Upload className="w-3 h-3 text-[#286B56]" />
+              <label className="flex items-center gap-1.5 bg-white border border-[#CBD5E1] rounded-lg px-3 py-1.5 text-xs cursor-pointer text-[#0F172A] hover:border-[#059669]">
+                <Upload className="w-3.5 h-3.5 text-[#059669]" />
                 <span>{cupGtFile ? cupGtFile.name : 'Upload Cup Reference Mask'}</span>
                 <input
                   type="file"
@@ -384,7 +422,7 @@ export const WorkspacePage: React.FC = () => {
                     setDiscGtFile(null);
                     setCupGtFile(null);
                   }}
-                  className="text-[11px] text-[#B54747] hover:underline"
+                  className="text-[11px] text-rose-600 hover:underline cursor-pointer"
                 >
                   Clear Reference Masks
                 </button>
@@ -396,21 +434,23 @@ export const WorkspacePage: React.FC = () => {
 
       {/* Error Banner */}
       {errorMessage && (
-        <div className="p-3 bg-[#FEF2F2] border border-[#FCA5A5] rounded-lg text-xs text-[#B54747] flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
+        <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
           <span>{errorMessage}</span>
         </div>
       )}
 
-      {/* Main Grid: Viewer + Telemetry & Quantitative Results */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        {/* Left 3 Columns: Interactive Image Canvas & Stages */}
-        <div className="lg:col-span-3 space-y-3">
+      {/* Main Grid: Viewer Centerpiece + Telemetry & Quantitative Results */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Left Columns: Interactive Image Canvas Centerpiece & Stages */}
+        <div className="lg:col-span-8 xl:col-span-8 space-y-3">
           <ImageViewer
             primaryImage={displayImg}
             overlayImage={activeStageKey === 'overlay' ? undefined : overlayImg}
+            maskImage={maskImg}
             splitImage={overlayImg}
             imageDimensions={inspectionData?.metadata}
+            trackType={activeTrack}
             onUpload={(file) => {
               setUploadedFile(file);
               setSelectedDataset('');
@@ -418,14 +458,14 @@ export const WorkspacePage: React.FC = () => {
             }}
             title={
               !hasImageLoaded
-                ? 'Retinal Fundus Canvas (Awaiting Upload)'
+                ? 'Retinal Fundus Canvas'
                 : activeTrack === 'vessels'
-                ? `Track A: Vessel Extraction (${activeStageKey.replace(/_/g, ' ')})`
-                : `Track B: Disc & Cup Boundary (${activeStageKey.replace(/_/g, ' ')})`
+                ? `Track A: Vessel Extraction — ${activeStageKey.replace(/_/g, ' ').toUpperCase()}`
+                : `Track B: Disc & Cup Contour — ${activeStageKey.replace(/_/g, ' ').toUpperCase()}`
             }
           />
 
-          {/* Intermediate Stage Selector */}
+          {/* Intermediate Stage Selector Filmstrip */}
           {stageItems.length > 0 && (
             <StageGallery
               stages={stageItems}
@@ -435,41 +475,41 @@ export const WorkspacePage: React.FC = () => {
           )}
         </div>
 
-        {/* Right 1 Column: Scientific Telemetry & Quantitative Metrics */}
-        <div className="space-y-3">
+        {/* Right Columns: Scientific Telemetry & Quantitative Metrics */}
+        <div className="lg:col-span-4 xl:col-span-4 space-y-3">
           {/* Metadata Card */}
-          <div className="bg-white border border-[#DFE4DF] rounded-lg p-3 text-xs space-y-2">
-            <div className="flex items-center justify-between pb-2 border-b border-[#DFE4DF]">
-              <span className="font-semibold text-[#202824]">Image Inspection</span>
-              <span className="font-mono text-[10px] text-[#69736D]">
-                {inspectionData ? (inspectionData.is_fov_estimated ? 'Estimated FOV' : 'Native FOV') : 'No Scan Loaded'}
+          <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 text-xs space-y-2.5 shadow-xs">
+            <div className="flex items-center justify-between pb-2 border-b border-[#E2E8F0]">
+              <span className="font-semibold text-[#0F172A]">Image Optical Inspection</span>
+              <span className="font-mono text-[10px] text-[#475569] bg-[#F8FAFC] px-2 py-0.5 rounded border border-[#E2E8F0]">
+                {inspectionData ? (inspectionData.is_fov_estimated ? 'Estimated FOV' : 'Dataset Native FOV') : 'No Scan Loaded'}
               </span>
             </div>
 
             {inspectionData ? (
-              <div className="font-mono text-[11px] space-y-1">
-                <div className="flex justify-between text-[#69736D]">
-                  <span>Dimensions:</span>
-                  <span className="text-[#202824]">
+              <div className="font-mono text-[11px] space-y-1.5">
+                <div className="flex justify-between text-[#64748B]">
+                  <span>Resolution:</span>
+                  <span className="text-[#0F172A] font-medium">
                     {inspectionData.metadata.width} × {inspectionData.metadata.height} px
                   </span>
                 </div>
-                <div className="flex justify-between text-[#69736D]">
+                <div className="flex justify-between text-[#64748B]">
                   <span>Channels:</span>
-                  <span className="text-[#202824]">{inspectionData.metadata.channels} (RGB)</span>
+                  <span className="text-[#0F172A]">{inspectionData.metadata.channels} (RGB)</span>
                 </div>
-                <div className="flex justify-between text-[#69736D]">
+                <div className="flex justify-between text-[#64748B]">
                   <span>Aspect Ratio:</span>
-                  <span className="text-[#202824]">{inspectionData.metadata.aspect_ratio}</span>
+                  <span className="text-[#0F172A]">{inspectionData.metadata.aspect_ratio}</span>
                 </div>
-                <div className="flex justify-between text-[#69736D]">
-                  <span>FOV Masking:</span>
-                  <span className="text-[#286B56] font-medium">Active (Border-Excluded)</span>
+                <div className="flex justify-between text-[#64748B]">
+                  <span>FOV Boundary:</span>
+                  <span className="text-[#059669] font-medium">Active (Rim-Excluded)</span>
                 </div>
               </div>
             ) : (
-              <p className="text-[11px] text-[#69736D] py-2 leading-relaxed">
-                Upload a fundus photograph to inspect optical resolution, channels, and Field-of-View boundaries.
+              <p className="text-xs text-[#64748B] py-2 leading-relaxed">
+                Upload or select a fundus photograph to inspect optical resolution, channels, and Field-of-View boundaries.
               </p>
             )}
           </div>
@@ -484,70 +524,85 @@ export const WorkspacePage: React.FC = () => {
               }
             />
           ) : (
-            <div className="bg-white border border-[#DFE4DF] rounded-lg p-3 text-xs text-[#69736D]">
-              <div className="font-semibold text-[#202824] pb-1 border-b border-[#DFE4DF] mb-2">
-                Pipeline Telemetry
+            <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 text-xs text-[#64748B] space-y-1.5 shadow-xs">
+              <div className="font-semibold text-[#0F172A] pb-1 border-b border-[#E2E8F0]">
+                Pipeline Telemetry Profiler
               </div>
-              <p className="text-[11px] leading-relaxed">
-                Wall-clock CPU execution latency profiled via <code className="font-mono bg-[#F5F6F4] px-1 py-0.5 rounded text-[#202824]">time.perf_counter()</code> will appear after running analysis.
+              <p className="text-xs text-[#64748B] leading-relaxed">
+                Deterministic wall-clock latency profiled via Python <code className="font-mono bg-[#F8FAFC] px-1.5 py-0.5 rounded text-[#0F172A] border border-[#E2E8F0]">time.perf_counter()</code> will appear after running analysis.
               </p>
             </div>
           )}
 
-          {/* Quantitative Metrics Badge */}
+          {/* Quantitative Metrics Badge & Clinical Assessment */}
           {activeTrack === 'vessels' && vesselResult && (
-            <MetricsBadge
-              title="Track A Measurements"
-              metrics={vesselResult.ground_truth_metrics}
-              vesselDensity={vesselResult.vessel_density}
-            />
+            <div className="space-y-3 animate-in fade-in duration-200">
+              <MetricsBadge
+                title="Track A Measurements"
+                metrics={vesselResult.ground_truth_metrics}
+                vesselDensity={vesselResult.vessel_density}
+              />
+              <DiabeticRetinopathyCard
+                vesselDensity={vesselResult.vessel_density}
+                assessment={vesselResult.dr_assessment}
+              />
+            </div>
           )}
 
           {activeTrack === 'disc_cup' && discCupResult && (
-            <div className="space-y-3">
+            <div className="space-y-3 animate-in fade-in duration-200">
               <MetricsBadge
                 title="Track B Measurements"
                 metrics={discCupResult.disc_metrics}
                 vcdr={discCupResult.vertical_cdr}
                 cdrError={discCupResult.cdr_absolute_error}
               />
+              <GlaucomaAssessmentCard
+                vcdr={discCupResult.vertical_cdr}
+                outcomeStatus={discCupResult.outcome_status}
+                isFallback={discCupResult.localization_checks?.disc_fallback_applied}
+                warnings={discCupResult.warnings}
+                assessment={discCupResult.glaucoma_assessment}
+              />
 
-              {/* Geometric Biomarker Details */}
-              <div className="bg-white border border-[#DFE4DF] rounded-lg p-3 text-xs space-y-1.5 font-mono">
-                <span className="font-semibold font-sans text-[#202824] block pb-1 border-b border-[#DFE4DF]">
-                  Morphometric Diameters
-                </span>
-                <div className="flex justify-between text-[#69736D]">
-                  <span>Disc Vert Diameter:</span>
-                  <span className="text-[#202824] font-medium">{discCupResult.disc_diameter_vertical_px} px</span>
+              {/* Geometric Biomarker Details in Clinic Mode */}
+              {isClinic && (
+                <div className="bg-white border border-[#E2E8F0] rounded-xl p-4 text-xs space-y-2 font-mono shadow-xs">
+                  <span className="font-semibold font-sans text-[#0F172A] block pb-1.5 border-b border-[#E2E8F0]">
+                    Morphometric Diameters &amp; Areas
+                  </span>
+                  <div className="flex justify-between text-[#64748B]">
+                    <span>Disc Vertical Extent:</span>
+                    <span className="text-[#0F172A] font-medium">{discCupResult.disc_diameter_vertical_px} px</span>
+                  </div>
+                  <div className="flex justify-between text-[#64748B]">
+                    <span>Cup Vertical Extent:</span>
+                    <span className="text-[#0F172A] font-medium">{discCupResult.cup_diameter_vertical_px} px</span>
+                  </div>
+                  <div className="flex justify-between text-[#64748B]">
+                    <span>Disc Area:</span>
+                    <span className="text-[#0F172A]">{discCupResult.disc_area_px.toLocaleString()} px²</span>
+                  </div>
+                  <div className="flex justify-between text-[#64748B]">
+                    <span>Cup Area:</span>
+                    <span className="text-[#0F172A]">{discCupResult.cup_area_px.toLocaleString()} px²</span>
+                  </div>
+                  <div className="flex justify-between text-[#64748B]">
+                    <span>Strict Containment:</span>
+                    <span className="text-[#059669] font-medium">100% Inside Disc</span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-[#69736D]">
-                  <span>Cup Vert Diameter:</span>
-                  <span className="text-[#202824] font-medium">{discCupResult.cup_diameter_vertical_px} px</span>
-                </div>
-                <div className="flex justify-between text-[#69736D]">
-                  <span>Disc Area:</span>
-                  <span className="text-[#202824]">{discCupResult.disc_area_px} px²</span>
-                </div>
-                <div className="flex justify-between text-[#69736D]">
-                  <span>Cup Area:</span>
-                  <span className="text-[#202824]">{discCupResult.cup_area_px} px²</span>
-                </div>
-                <div className="flex justify-between text-[#69736D]">
-                  <span>Containment:</span>
-                  <span className="text-[#286B56] font-medium">100% Inside Disc</span>
-                </div>
-              </div>
+              )}
 
-              {/* Diagnostic Warnings */}
+              {/* Diagnostic Contour Warnings */}
               {discCupResult.warnings.length > 0 && (
-                <div className="p-2.5 bg-[#FFFBEB] border border-[#FDE68A] rounded-lg text-[11px] text-[#B7791F] space-y-1">
-                  <div className="font-semibold flex items-center gap-1">
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    <span>Contour Advisory</span>
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1 shadow-2xs">
+                  <div className="font-semibold flex items-center gap-1.5 text-amber-950">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Contour Boundary Advisory</span>
                   </div>
                   {discCupResult.warnings.map((w, idx) => (
-                    <p key={idx}>{w}</p>
+                    <p key={idx} className="text-[11px]">{w}</p>
                   ))}
                 </div>
               )}

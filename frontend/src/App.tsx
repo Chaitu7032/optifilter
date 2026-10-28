@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { WorkstationProvider, useWorkstationMode } from './context/WorkstationContext';
 import { AppHeader } from './components/AppHeader';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { VesselAnalysisPage } from './pages/VesselAnalysisPage';
@@ -8,10 +9,11 @@ import { ExperimentsPage } from './pages/ExperimentsPage';
 import { DocumentationPage } from './pages/DocumentationPage';
 import { fetchHealth } from './services/api';
 
-export function App() {
+function MainWorkstation() {
   const [currentTab, setCurrentTab] = useState<string>('workspace');
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set(['workspace']));
   const [systemInfo, setSystemInfo] = useState<Record<string, string> | undefined>(undefined);
+  const { isClinic } = useWorkstationMode();
 
   useEffect(() => {
     setVisitedTabs((prev) => {
@@ -29,7 +31,7 @@ export function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#F5F6F4] text-[#202824] flex flex-col">
+    <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] flex flex-col antialiased selection:bg-[#10B981]/20 selection:text-[#059669]">
       {/* Top Application Header */}
       <AppHeader
         currentTab={currentTab}
@@ -38,7 +40,7 @@ export function App() {
       />
 
       {/* Main Scientific Workstation Canvas - Preserves page state across tab switches */}
-      <main className="flex-1 pb-12">
+      <main className="flex-1 pb-10">
         <div style={{ display: currentTab === 'workspace' ? 'block' : 'none' }}>
           <WorkspacePage />
         </div>
@@ -70,21 +72,37 @@ export function App() {
       </main>
 
       {/* Scientific Footer */}
-      <footer className="border-t border-[#DFE4DF] bg-white py-3 px-6 text-xs text-[#69736D]">
-        <div className="max-w-[1720px] mx-auto flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-[#202824]">OptiFilter / MorphoVision</span>
-            <span>•</span>
+      <footer className="border-t border-[#E2E8F0] bg-white py-2.5 px-4 sm:px-6 text-xs text-[#64748B]">
+        <div className="max-w-[1780px] mx-auto flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-[#0F172A]">OptiFilter / MorphoVision</span>
+            <span className="text-[#CBD5E1]">•</span>
             <span>Academic Classical Digital Image Processing Workstation</span>
-            <span>•</span>
-            <span className="text-[#286B56] font-medium">Zero AI / ML Guarantee</span>
+            <span className="text-[#CBD5E1]">•</span>
+            <span className="text-[#059669] font-medium">Deterministic CV (0.00% AI/ML)</span>
+            <span className="text-[#CBD5E1]">•</span>
+            <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+              isClinic
+                ? 'bg-[#0EA5E9]/10 text-[#0284C7] border-[#0EA5E9]/30 font-medium'
+                : 'bg-[#10B981]/10 text-[#059669] border-[#10B981]/30 font-medium'
+            }`}>
+              {isClinic ? '🔬 Clinic Mode Active' : '🎓 Student Mode Active'}
+            </span>
           </div>
-          <div className="font-mono text-[11px]">
-            Target: &lt; 2000 ms CPU Latency • Deterministic Computer Vision
+          <div className="font-mono text-[11px] text-[#94A3B8]">
+            Target: &lt; 2,000 ms CPU Latency • Strict FOV Boundary Evaluation
           </div>
         </div>
       </footer>
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <WorkstationProvider>
+      <MainWorkstation />
+    </WorkstationProvider>
   );
 }
 

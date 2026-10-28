@@ -182,6 +182,43 @@ def segment_retinal_vessels(
     vessel_pixel_count = int(np.count_nonzero(binary_mask))
     vessel_density = float(vessel_pixel_count / fov_pixel_count) if fov_pixel_count > 0 else 0.0
 
+    # ── Mask-Derived Vessel Density Statistic ─────────────────────────────────
+    density_pct = round(vessel_density * 100, 2)
+    dr_disclaimer = (
+        "Mask-derived image statistic. This exploratory measurement does not infer clinical "
+        "diabetic retinopathy, ischemia, or vascular perfusion status. Clinical assessment requires validated ophthalmic diagnostics."
+    )
+    if vessel_density < 0.08:
+        dr_status = "Sub-nominal vessel density (< 8.0%)"
+        dr_risk = "low_density"
+        dr_desc = (
+            f"Mask-derived vessel density ({density_pct}%) falls below standard 8.0% - 16.0% exploratory reference window. "
+            "May reflect reduced vascular caliber, peripheral illumination drop, or low photographic contrast."
+        )
+        dr_thresh = "vessel density < 8.0%"
+    elif vessel_density > 0.16:
+        dr_status = "Elevated vessel density (> 16.0%)"
+        dr_risk = "high_density"
+        dr_desc = (
+            f"Mask-derived vessel density ({density_pct}%) exceeds 16.0%. "
+            "May indicate high vascular complexity or localized segmentation false positives."
+        )
+        dr_thresh = "vessel density > 16.0%"
+    else:
+        dr_status = "Nominal vessel density (8.0% - 16.0%)"
+        dr_risk = "nominal"
+        dr_desc = f"Mask-derived vessel density ({density_pct}%) falls within standard exploratory fundus range (8.0% - 16.0%)."
+        dr_thresh = "8.0% <= vessel density <= 16.0%"
+
+    dr_assessment = {
+        "status": dr_status,
+        "risk_level": dr_risk,
+        "vessel_density_pct": density_pct,
+        "description": dr_desc,
+        "threshold_used": dr_thresh,
+        "disclaimer": dr_disclaimer,
+    }
+
     telemetry = profiler.finish()
 
     # 6. Visualization & Intermediate Image Generation
@@ -220,6 +257,8 @@ def segment_retinal_vessels(
         "fov_pixel_count": fov_pixel_count,
         "vessel_pixel_count": vessel_pixel_count,
         "vessel_density": round(vessel_density, 4),
+        "dr_status": dr_status,
+        "dr_assessment": dr_assessment,
         "threshold_info": threshold_info,
         "parameters": params,
         "telemetry": telemetry,

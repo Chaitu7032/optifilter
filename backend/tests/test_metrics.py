@@ -154,3 +154,53 @@ def test_degenerate_disc_handling():
     assert cdr_res["is_valid"] is False
     assert cdr_res["vcdr"] is None
     assert "non-positive" in cdr_res["warning"]
+
+
+def test_bland_altman_synthetic():
+    """Verify Bland-Altman agreement calculation with exact manual calculation."""
+    from app.evaluation.metrics import compute_bland_altman
+    y_pred = np.array([0.5, 0.6, 0.7, 0.8])
+    y_ref  = np.array([0.4, 0.5, 0.8, 0.7])
+    # diffs = [0.1, 0.1, -0.1, 0.1]
+    # mean diff (bias) = (0.1 + 0.1 - 0.1 + 0.1)/4 = 0.2/4 = 0.05
+    # diff - mean = [0.05, 0.05, -0.15, 0.05]
+    # sum of squares = 0.0025 + 0.0025 + 0.0225 + 0.0025 = 0.03
+    # sample variance (ddof=1) = 0.03 / 3 = 0.01
+    # sample sd = 0.1
+    # loa_lower = 0.05 - 1.96 * 0.1 = -0.146
+    # loa_upper = 0.05 + 1.96 * 0.1 = +0.246
+    res = compute_bland_altman(y_pred, y_ref)
+    assert res["n"] == 4
+    assert res["bias"] == 0.05
+    assert res["sd_diff"] == 0.1
+    assert res["loa_lower"] == -0.146
+    assert res["loa_upper"] == 0.246
+
+
+def test_cdr_summary_statistics_synthetic():
+    """Verify MAE, MedAE, RMSE, and correlations on known data."""
+    from app.evaluation.metrics import compute_cdr_summary_statistics
+    y_pred = np.array([0.5, 0.6, 0.7, 0.8])
+    y_ref  = np.array([0.4, 0.5, 0.8, 0.7])
+    # abs errs = [0.1, 0.1, 0.1, 0.1] -> MAE = 0.1, MedAE = 0.1, RMSE = 0.1
+    res = compute_cdr_summary_statistics(y_pred, y_ref)
+    assert res["n"] == 4
+    assert res["mae"] == 0.1
+    assert res["medae"] == 0.1
+    assert res["rmse"] == 0.1
+    assert res["pearson_r"] is not None
+    assert res["spearman_rho"] is not None
+
+
+def test_aggregate_statistics_synthetic():
+    """Verify sample std, median, IQR, and CI on known values."""
+    from app.evaluation.metrics import aggregate_statistics
+    data = np.array([10.0, 20.0, 30.0, 40.0, 50.0])
+    res = aggregate_statistics(data)
+    assert res["n"] == 5
+    assert res["mean"] == 30.0
+    # sample std of [10, 20, 30, 40, 50] with ddof=1 is sqrt(1000/4) = sqrt(250) = 15.8114
+    assert res["std"] == 15.8114
+    assert res["median"] == 30.0
+    assert res["ci95_low"] < 30.0 < res["ci95_high"]
+

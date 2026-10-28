@@ -1,0 +1,8 @@
+variant,mean_dice,std_dice,median_dice,iqr_dice,mean_iou,mean_sensitivity,mean_specificity,mean_precision,mean_runtime_ms
+Full Baseline,0.6452,0.0617,0.6673,0.0624,0.479,0.7188,0.9295,0.5935,537.7671
+No CLAHE (Raw Green),0.6432,0.057,0.6649,0.0492,0.4763,0.6948,0.9354,0.6106,528.0428
+Single-Scale Frangi (sigma=2.0),0.6854,0.0732,0.7143,0.0572,0.5254,0.7178,0.9461,0.6736,68.1669
+No Hysteresis (Percentile 90),0.6208,0.0511,0.6311,0.0538,0.4519,0.5155,0.9809,0.7897,537.4587
+No Small-Component Removal,0.6203,0.0663,0.6378,0.0967,0.4527,0.7233,0.9153,0.5507,526.5671
+Fair Fixed-Percentile (P88),0.6482,0.0512,0.6611,0.0417,0.4815,0.5665,0.9759,0.7662,519.1111
+Naive Otsu (Raw Response),0.1122,0.1151,0.0829,0.1919,0.0633,0.0659,0.9937,0.4219,512.1019
