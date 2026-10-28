@@ -7,3 +7,14 @@ __pycache__/
 .pytest_cache/
 dist/
 .env
+
+# Documentation directories and generated image assets
+**/docs/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.webp
+*.bmp
+*.ico
